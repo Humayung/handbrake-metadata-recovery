@@ -12,21 +12,14 @@ def is_handbrake_file(file: Path) -> bool:
     return file.stem.endswith("_handbrake")
 
 
-def original_name_from_handbrake(hb: Path) -> str:
-    # video_handbrake.mp4 -> video.mp4
-    return hb.stem.removesuffix("_handbrake") + hb.suffix
-
-
 def restore_metadata(base: Path):
     files = list_mp4(base)
-
     originals = [f for f in files if not is_handbrake_file(f)]
 
     for original in originals:
-        expected_hb = base / f"{original.stem}_handbrake{original.suffix}"
-
-        if not expected_hb.exists():
-            print(f"⚠️  Missing handbrake output: {original.name}")
+        hb = base / f"{original.stem}_handbrake{original.suffix}"
+        if not hb.exists():
+            print(f"⚠️  No handbrake output: {original.name}")
             continue
 
         cmd = [
@@ -36,7 +29,6 @@ def restore_metadata(base: Path):
             "-TagsFromFile", str(original),
             "-All:All",
 
-            # dates
             "-CreateDate<${CreateDate}",
             "-ModifyDate<${ModifyDate}",
             "-MediaCreateDate<${MediaCreateDate}",
@@ -45,7 +37,6 @@ def restore_metadata(base: Path):
             "-TrackModifyDate<${TrackModifyDate}",
             "-FileModifyDate<${FileModifyDate}",
 
-            # GPS / location
             "-GPSLatitude<${GPSLatitude}",
             "-GPSLongitude<${GPSLongitude}",
             "-GPSAltitude<${GPSAltitude}",
@@ -54,55 +45,63 @@ def restore_metadata(base: Path):
             "-LocationISO6709<${LocationISO6709}",
             "-Keys:LocationInformation<${Keys:LocationInformation}",
 
-            expected_hb.as_posix()
+            hb.as_posix()
         ]
 
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        if result.returncode == 0:
-            print(f"✅ Metadata restored: {expected_hb.name}")
-        else:
-            print(f"❌ Metadata restore failed: {expected_hb.name}")
-            print(result.stderr.decode())
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        print(f"✅ Metadata restored: {hb.name}")
 
 
 def isolate_missing(base: Path):
     target = base / "not-hanbraked"
     target.mkdir(exist_ok=True)
 
-    files = list_mp4(base)
-    originals = [f for f in files if not is_handbrake_file(f)]
-
-    for original in originals:
-        expected_hb = base / f"{original.stem}_handbrake{original.suffix}"
-        if expected_hb.exists():
+    for f in list_mp4(base):
+        if is_handbrake_file(f):
             continue
 
-        print(f"📦 Moving (NO handbrake): {original.name}")
-        shutil.move(original, target / original.name)
+        hb = base / f"{f.stem}_handbrake{f.suffix}"
+        if hb.exists():
+            continue
+
+        print(f"📦 Moving (no handbrake): {f.name}")
+        shutil.move(f, target / f.name)
 
 
 def isolate_present(base: Path):
     target = base / "handbraked"
     target.mkdir(exist_ok=True)
 
-    files = list_mp4(base)
-    originals = [f for f in files if not is_handbrake_file(f)]
-
-    for original in originals:
-        expected_hb = base / f"{original.stem}_handbrake{original.suffix}"
-        if not expected_hb.exists():
+    for f in list_mp4(base):
+        if is_handbrake_file(f):
             continue
 
-        print(f"📦 Moving (HAS handbrake): {original.name}")
-        shutil.move(original, target / original.name)
+        hb = base / f"{f.stem}_handbrake{f.suffix}"
+        if not hb.exists():
+            continue
+
+        print(f"📦 Moving (has handbrake): {f.name}")
+        shutil.move(f, target / f.name)
+
+
+def isolate_handbrake_files(base: Path):
+    target = base / "handbraked-files"
+    target.mkdir(exist_ok=True)
+
+    for f in list_mp4(base):
+        if not is_handbrake_file(f):
+            continue
+
+        print(f"📦 Moving handbrake file: {f.name}")
+        shutil.move(f, target / f.name)
 
 
 def show_menu():
-    print("\nSelect an action:")
+    print("\nSelect action:")
     print("1. Restore metadata to handbrake outputs")
-    print("2. Isolate videos WITHOUT handbrake output")
-    print("3. Isolate videos WITH handbrake output")
+    print("2. Isolate originals WITHOUT handbrake output")
+    print("3. Isolate originals WITH handbrake output")
+    print("4. Isolate HANDRAKED video files (_handbrake.mp4)")
     print("0. Exit")
 
 
@@ -125,11 +124,13 @@ def main():
             isolate_missing(base)
         elif choice == "3":
             isolate_present(base)
+        elif choice == "4":
+            isolate_handbrake_files(base)
         elif choice == "0":
             print("Done.")
             break
         else:
-            print("Invalid choice. Use numbers, not anger.")
+            print("Invalid choice.")
 
 
 if __name__ == "__main__":

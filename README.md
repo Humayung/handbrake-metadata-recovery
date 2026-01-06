@@ -34,3 +34,5 @@ Notes:
 - Originals untouched
 - Matching is strict:
   filename.mp4 <-> filename_handbrake.mp4
+
+**Note:** This project was made with help from AI. Its mainly for my private use, but feel free to use it if you find it useful. No guarantees though.
